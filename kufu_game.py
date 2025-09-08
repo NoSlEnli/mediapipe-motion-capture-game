@@ -168,21 +168,82 @@ def evaluate_session(frames, references, pose):
     total_refs = len(references)
     grade = grade_from_matches(n_matched, total_refs)
     if grade == "F":
-        feedback = "You failed,press Esc to exit and try again"
+        feedback = "You failed press Exit to try again"
     elif grade == "D":
-        feedback = "You pass ,press Esc to exit"
+        feedback = "You pass press Exit to continue"
     elif grade == "C":
-        feedback = "Well done,you pass, press Esc to exit"
+        feedback = "Well done, you press Exit to continue"
     elif grade == "B":
-        feedback = "Excellent,great job, press Esc to exit"
+        feedback = "Excellent, great job press Exit to continue"
     elif grade == "A":
-        feedback = "Perfect,match all steps!,press Esc to exit"
+        feedback = "Perfect, matched all steps! press Exit to continue"
     else:
-        feedback = "almost pass,press Esc to exit"
+        feedback = "Almost pass press Exit to continue"
     print(f"[Game] Matched {n_matched}/{total_refs} reference poses")
     print(f"[Game] Final Grade: {grade}")
     print("[Game] " + feedback)
     return n_matched, total_refs, grade, feedback
+
+
+def confirm_quit(cap):
+    """Show a fullscreen confirmation dialog. Returns True if user confirms quit."""
+    h, w = 300, 700
+    confirm_screen = np.zeros((h, w, 3), dtype=np.uint8)
+    cv2.putText(confirm_screen, "Are you sure you want to quit?",
+                (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+    cv2.putText(confirm_screen, "Click Yes or No, or press Y/N.",
+                (40, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 1)
+
+    
+    btn_w, btn_h = 140, 60
+    yes_x1, yes_y1 = 120, 200
+    yes_x2, yes_y2 = yes_x1 + btn_w, yes_y1 + btn_h
+    no_x1, no_y1 = 440, 200
+    no_x2, no_y2 = no_x1 + btn_w, no_y1 + btn_h
+
+    cv2.rectangle(confirm_screen, (yes_x1, yes_y1), (yes_x2, yes_y2), (0, 200, 0), -1)
+    cv2.putText(confirm_screen, "Yes", (yes_x1 + 35, yes_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+    cv2.rectangle(confirm_screen, (no_x1, no_y1), (no_x2, no_y2), (0, 0, 200), -1)
+    cv2.putText(confirm_screen, "No", (no_x1 + 45, no_y1 + 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+    cv2.imshow("Confirm", confirm_screen)
+    try:
+        cv2.setWindowProperty("Confirm", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    except Exception:
+        
+        pass
+
+    
+    result = {"confirmed": None}
+
+    def _mouse(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if yes_x1 <= x <= yes_x2 and yes_y1 <= y <= yes_y2:
+                result["confirmed"] = True
+            elif no_x1 <= x <= no_x2 and no_y1 <= y <= no_y2:
+                result["confirmed"] = False
+
+    cv2.setMouseCallback("Confirm", _mouse)
+
+    while True:
+        k = cv2.waitKey(1) & 0xFF
+        
+        if k in (ord('y'), ord('Y')):
+            result["confirmed"] = True
+        elif k in (ord('n'), ord('N')):
+            result["confirmed"] = False
+
+        if result["confirmed"] is not None:
+            if result["confirmed"]:
+                try:
+                    cap.release()
+                except Exception:
+                    pass
+                cv2.destroyAllWindows()
+                return True
+            else:
+                cv2.destroyWindow("Confirm")
+                return False
 
 
 
@@ -201,8 +262,24 @@ def main():
 
     recording = False
     recorded_frames = []
+    clicked_button = [None]  
 
     
+    button_start = [0, 0, 0, 0]
+    button_stop  = [0, 0, 0, 0]
+    button_quit  = [0, 0, 0, 0]
+
+    def mouse_callback(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN:
+            if button_start[0] <= x <= button_start[2] and button_start[1] <= y <= button_start[3]:
+                clicked_button[0] = "start"
+            elif button_stop[0] <= x <= button_stop[2] and button_stop[1] <= y <= button_stop[3]:
+                clicked_button[0] = "stop"
+            elif button_quit[0] <= x <= button_quit[2] and button_quit[1] <= y <= button_quit[3]:
+                clicked_button[0] = "quit"
+
+    cv2.setMouseCallback(WIN_NAME, mouse_callback)
+
     with mp_pose.Pose(
         model_complexity=1,
         smooth_landmarks=True,
@@ -211,7 +288,7 @@ def main():
         min_tracking_confidence=0.5
     ) as pose:
 
-        print("Press S to Start, E to Stop & Evaluate, Q to Quit")
+        print("Click Start / Stop / Quit on screen")
 
         while True:
             ret, frame = cap.read()
@@ -219,17 +296,35 @@ def main():
                 print("[Error] Failed to read camera")
                 break
 
-            
             results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             if results.pose_landmarks:
-                mp_drawing.draw_landmarks(
-                    frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS
-                )
+                mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
+
+            h, w = frame.shape[:2]
 
             
-            h, w = frame.shape[:2]
-            cv2.putText(frame, "S = Start | E = Stop and Get result | Q = Quit",
-                        (20, h - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+            btn_height = 50
+            margin = 20
+            btn_y1 = h - btn_height - margin
+            btn_y2 = h - margin
+            btn_width = (w - 4 * margin) // 3
+
+            button_start[:] = [margin, btn_y1, margin + btn_width, btn_y2]
+            button_stop[:]  = [2*margin + btn_width, btn_y1, 2*margin + 2*btn_width, btn_y2]
+            button_quit[:]  = [3*margin + 2*btn_width, btn_y1, 3*margin + 3*btn_width, btn_y2]
+
+            
+            cv2.rectangle(frame, tuple(button_start[:2]), tuple(button_start[2:]), (0,255,0), -1)
+            cv2.putText(frame, "Start", (button_start[0]+20, button_start[1]+35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,0), 2)
+
+            cv2.rectangle(frame, tuple(button_stop[:2]), tuple(button_stop[2:]), (0,255,255), -1)
+            cv2.putText(frame, "Stop & Result", (button_stop[0]+10, button_stop[1]+35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,0,0), 2)
+
+            cv2.rectangle(frame, tuple(button_quit[:2]), tuple(button_quit[2:]), (0,0,255), -1)
+            cv2.putText(frame, "Quit", (button_quit[0]+30, button_quit[1]+35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
 
             if recording:
                 cv2.putText(frame, "REC", (w - 100, 50),
@@ -237,95 +332,110 @@ def main():
                 recorded_frames.append(frame.copy())
 
             cv2.imshow(WIN_NAME, frame)
-            key = cv2.waitKey(1) & 0xFF
 
-            if key in (ord('s'), ord('S')):
-                print("[Game] Starting after 5 second")
-                
-                h,w = frame.shape[:2]
-
+           
+            if clicked_button[0] == "start":
+                print("[Game] Starting after 5 second countdown...")
                 for i in range(5,0,-1):
                     countdown_frame = np.zeros((h, w, 3), dtype=np.uint8)
-                    
-
-                    text= f"{i}"
-                    font=cv2.FONT_HERSHEY_SIMPLEX
-                    font_scale=5
-                    thickness=8
+                    text = f"{i}"
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    font_scale = 5
+                    thickness = 8
                     text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
-
                     text_x = (w - text_size[0]) // 2
                     text_y = (h + text_size[1]) // 2
-
                     cv2.putText(countdown_frame, text, (text_x, text_y),
-                                font, font_scale, (0, 255, 0), thickness,cv2.LINE_AA)
-                    
+                                font, font_scale, (0, 255, 0), thickness, cv2.LINE_AA)
                     cv2.imshow(WIN_NAME, countdown_frame)
                     cv2.waitKey(1000)
-
                 print("[Game] Start recording Kungfu section")
                 recording = True
-                recorded_frames = [] 
-            elif key in (ord('e'), ord('E')):   
-                if recording:
-                      print("[Game] Stopped recording. Processing results...")
-                      recording = False
+                recorded_frames = []
+                clicked_button[0] = None
 
-                if len(recorded_frames) > 0:   
-                               
+            elif clicked_button[0] == "stop":
+                if recording:
+                    print("[Game] Stopped recording. Processing results...")
+                    recording = False
+                if len(recorded_frames) > 0:
                     processing_screen = np.zeros((300, 700, 3), dtype=np.uint8)
                     cv2.putText(processing_screen, "Now processing the result...",
-                    (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+                                (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
                     cv2.imshow("Result", processing_screen)
                     cv2.setWindowProperty("Result", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
                     cv2.waitKey(1)
 
-                        
                     n, total, grade, feedback = evaluate_session(recorded_frames, references, pose)
 
-                     
                     summary = np.zeros((300, 700, 3), dtype=np.uint8)
                     cv2.putText(summary, f"Matched: {n}/{total}", (40, 120),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, TEXT_COLOR, 3)
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.5, TEXT_COLOR, 3)
                     cv2.putText(summary, f"Grade: {grade}", (40, 200),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, TEXT_COLOR, 3)
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.5, TEXT_COLOR, 3)
                     cv2.putText(summary, feedback, (40, 270),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+                    # Draw a clickable Exit button instead of relying on ESC
+                    btn_w, btn_h = 160, 60
+                    margin = 20
+                    # place button at top-right corner of the 700x300 summary
+                    ex_x2 = 700 - margin
+                    ex_y1 = margin
+                    ex_x1 = ex_x2 - btn_w
+                    ex_y2 = ex_y1 + btn_h
+                    cv2.rectangle(summary, (ex_x1, ex_y1), (ex_x2, ex_y2), (50, 50, 50), -1)
+                    text_size = cv2.getTextSize("Exit", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+                    tx = ex_x1 + (btn_w - text_size[0]) // 2
+                    ty = ex_y1 + (btn_h + text_size[1]) // 2
+                    cv2.putText(summary, "Exit", (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                     cv2.imshow("Result", summary)
-                    cv2.setWindowProperty("Result", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-                    cv2.waitKey(0)
-                    cv2.destroyWindow("Result")
+                    try:
+                        cv2.setWindowProperty("Result", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                    except Exception:
+                        pass
 
-                else:   
+                    exit_state = {"exit": False}
+
+                    def _result_mouse(event, x, y, flags, param):
+                        if event == cv2.EVENT_LBUTTONDOWN:
+                            if ex_x1 <= x <= ex_x2 and ex_y1 <= y <= ex_y2:
+                                exit_state["exit"] = True
+
+                    cv2.setMouseCallback("Result", _result_mouse)
+
+                    # Modal wait loop: wait for click on Exit button (Esc still acts as fallback)
+                    while True:
+                        k = cv2.waitKey(1) & 0xFF
+                        if exit_state["exit"]:
+                            break
+                        if k == 27:  # allow ESC as fallback
+                            break
+
+                    cv2.destroyWindow("Result")
+                else:
                     warning_screen = np.zeros((300, 700, 3), dtype=np.uint8)
                     cv2.putText(warning_screen, " No frames recorded!",
-                    (60, 150), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-                    cv2.putText(warning_screen, "Press S to start recording first!",
-                    (60, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                                (60, 150), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+                    cv2.putText(warning_screen, "Press Start to record first!",
+                                (60, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
                     cv2.imshow("Result", warning_screen)
                     cv2.setWindowProperty("Result", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
                     cv2.waitKey(1500)
                     cv2.destroyWindow("Result")
+                clicked_button[0] = None
 
-
-            elif key in (ord('q'), ord('Q')):
-                confirm_screen = np.zeros((300, 700, 3), dtype=np.uint8)
-                cv2.putText(confirm_screen, "Are you sure you want to quit?",
-                            (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                cv2.putText(confirm_screen, "Press Y to confirm, N to cancel.",
-                            (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-                cv2.imshow("Confirm", confirm_screen)
-                cv2.setWindowProperty("Confirm", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
-                while True:
-                    key = cv2.waitKey(1) & 0xFF
-                    if key in (ord('y'), ord('Y')):
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return
-                    elif key in (ord('n'), ord('N')):
-                        cv2.destroyWindow("Confirm")
-                        break
+            elif clicked_button[0] == "quit":
+                
+                if confirm_quit(cap):
+                    return
+                clicked_button[0] = None
+            
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:  # ESC
+                break
+            if key in (ord('q'), ord('Q')):
+                if confirm_quit(cap):
+                    return
 
     cap.release()
     cv2.destroyAllWindows()

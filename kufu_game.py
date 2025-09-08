@@ -408,7 +408,7 @@ def main():
                         k = cv2.waitKey(1) & 0xFF
                         if exit_state["exit"]:
                             break
-                        if k == 27:  # allow ESC as fallback
+                        if k == 27:  
                             break
 
                     cv2.destroyWindow("Result")
@@ -444,5 +444,6 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 

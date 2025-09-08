@@ -81,7 +81,6 @@ def compare_landmarks(user, reference):
     ref_norm = normalize_landmarks(reference)
     if user_norm is None or ref_norm is None:
         return 0.0
-    # Use only first 33 joints (defensive)
     user_norm = user_norm[:33]
     ref_norm  = ref_norm[:33]
     return cosine_sim(user_norm, ref_norm)
@@ -444,6 +443,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 

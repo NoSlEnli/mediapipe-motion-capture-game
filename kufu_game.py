@@ -403,7 +403,7 @@ def main():
 
                     cv2.setMouseCallback("Result", _result_mouse)
 
-                    # Modal wait loop: wait for click on Exit button (Esc still acts as fallback)
+                    
                     while True:
                         k = cv2.waitKey(1) & 0xFF
                         if exit_state["exit"]:
@@ -444,3 +444,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+

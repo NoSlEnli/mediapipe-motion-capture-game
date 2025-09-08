@@ -375,10 +375,10 @@ def main():
                                 cv2.FONT_HERSHEY_SIMPLEX, 1.5, TEXT_COLOR, 3)
                     cv2.putText(summary, feedback, (40, 270),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-                    # Draw a clickable Exit button instead of relying on ESC
+                   
                     btn_w, btn_h = 160, 60
                     margin = 20
-                    # place button at top-right corner of the 700x300 summary
+                    
                     ex_x2 = 700 - margin
                     ex_y1 = margin
                     ex_x1 = ex_x2 - btn_w
@@ -444,4 +444,5 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
